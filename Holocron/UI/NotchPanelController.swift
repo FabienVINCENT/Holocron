@@ -177,4 +177,11 @@ final class NotchPanelController: NSObject {
 private final class NotchPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// AppKit normally pushes borderless windows below the menu bar. The
+    /// whole point of this panel is to hug the top edge of the screen (and
+    /// blend into the notch), so the frame is returned untouched.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
 }
