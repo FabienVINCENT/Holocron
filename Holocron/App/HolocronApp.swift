@@ -19,6 +19,14 @@ struct HolocronApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single instance: a stale twin (e.g. hung after a crash) stacks an
+        // invisible panel over ours at the top of the screen and swallows
+        // hover/clicks. The newest launch wins.
+        let bundleID = Bundle.main.bundleIdentifier ?? "fr.fabien-vincent.holocron"
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+            .forEach { $0.forceTerminate() }
+
         // LSUIElement app: no Dock icon, notch panel + menu bar item only.
         NSApp.setActivationPolicy(.accessory)
         Task { @MainActor in
