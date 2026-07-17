@@ -28,3 +28,6 @@ jobs:
       contents: write
     with:
       tag: ${{ needs.compute-tag.outputs.tag }}
+    # Reusable workflows do NOT see the caller's secrets unless inherited —
+    # without this, SPARKLE_PRIVATE_KEY is empty in the signing step.
+    secrets: inherit
