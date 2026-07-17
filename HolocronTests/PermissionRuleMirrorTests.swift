@@ -49,6 +49,28 @@ final class PermissionRuleMirrorTests: XCTestCase {
                                      toolInput: .object(["command": .string("unclosed")])))
     }
 
+    func testDenyAndAskRulesVetoAllow() {
+        // Claude Code precedence is deny > ask > allow: an allow match must
+        // not predict auto-approval when a deny/ask rule also matches.
+        let mirror = PermissionRuleMirror(
+            allowPatterns: ["Bash"],
+            denyPatterns: ["Bash(rm:*)"],
+            askPatterns: ["Bash(git push:*)"]
+        )
+        XCTAssertEqual(
+            mirror.verdict(toolName: "Bash", toolInput: .object(["command": .string("ls")])),
+            .autoAllowed(rule: "Bash")
+        )
+        XCTAssertEqual(
+            mirror.verdict(toolName: "Bash", toolInput: .object(["command": .string("rm -rf /tmp/x")])),
+            .wouldPrompt
+        )
+        XCTAssertEqual(
+            mirror.verdict(toolName: "Bash", toolInput: .object(["command": .string("git push origin main")])),
+            .wouldPrompt
+        )
+    }
+
     func testGlobMatcher() {
         XCTAssertTrue(PermissionRuleMirror.globMatch(pattern: "src/*.ts", subject: "src/a.ts"))
         XCTAssertTrue(PermissionRuleMirror.globMatch(pattern: "*", subject: "anything"))

@@ -5,6 +5,20 @@ matching `## [x.y.z]` section by the release workflow.
 
 ## [Unreleased]
 
+## [0.2.1]
+
+### Fixed
+- Permission cards degraded to "jump to terminal" in some setups: the rule
+  mirror only read `permissions.allow`, but Claude Code precedence is
+  deny > ask > allow — a matching deny/ask rule now vetoes the passthrough
+  so the interactive card shows whenever Claude Code would prompt.
+
+### Added
+- Hook debug journal: every hook event and decision is traced to
+  ~/Library/Application Support/Holocron/logs (hook-app.log from the app,
+  hook-client.log from the helper, with fail-open reasons) and the last
+  events are visible in Settings → Hook debug.
+
 ## [0.2.0]
 
 ### Added

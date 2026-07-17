@@ -57,9 +57,10 @@ targets:
     platform: macOS
     sources:
       - path: HookCLI
-      # The IPC protocol (and its JSON model) is shared source between the
-      # app and the hook binary.
+      # The IPC protocol (and its JSON model + debug log) is shared source
+      # between the app and the hook binary.
       - path: Holocron/Core/Hooks/HookProtocol.swift
+      - path: Holocron/Core/Hooks/HookDebugLog.swift
       - path: Holocron/Core/Models/JSONValue.swift
     settings:
       base:

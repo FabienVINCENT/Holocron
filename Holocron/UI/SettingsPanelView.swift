@@ -21,6 +21,7 @@ struct SettingsPanelView: View {
                 soundsSection
                 miscSection
                 updatesSection
+                hookDebugSection
                 probeSection
             }
             .padding(.bottom, 6)
@@ -205,6 +206,28 @@ struct SettingsPanelView: View {
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Theme.textTertiary)
             }
+        }
+    }
+
+    private var hookDebugSection: some View {
+        section("Hook debug (last events)") {
+            let events = Array(state.center.recentHookEvents.suffix(8).reversed())
+            if events.isEmpty {
+                Text("No hook traffic yet — start a new claude session with hooks installed.")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.textTertiary)
+            } else {
+                ForEach(Array(events.enumerated()), id: \.offset) { _, event in
+                    Text(event)
+                        .font(.system(size: 8.5, design: .monospaced))
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+            Button("Reveal log files") {
+                NSWorkspace.shared.open(HookDebugLog.directory())
+            }
+            .controlSize(.small)
         }
     }
 

@@ -8,6 +8,9 @@ import Observation
 @Observable
 final class InteractionCenter {
     private(set) var pending: [PendingInteraction] = []
+    /// Rolling journal of hook traffic + decisions, surfaced in Settings →
+    /// Advanced and mirrored to logs/hook-app.log for bug reports.
+    private(set) var recentHookEvents: [String] = []
 
     /// Side-effect taps, wired by the app delegate. Invoked on the main actor.
     @ObservationIgnored var onCardAppeared: (@MainActor (PendingInteraction) -> Void)?
@@ -38,8 +41,18 @@ final class InteractionCenter {
 
     // MARK: - Envelope entry point
 
+    private func trace(_ line: String) {
+        recentHookEvents.append(line)
+        if recentHookEvents.count > 30 {
+            recentHookEvents.removeFirst(recentHookEvents.count - 30)
+        }
+        HookDebugLog.append(line, to: "hook-app.log")
+    }
+
     func handle(_ envelope: HookEnvelope, reply: @escaping @Sendable (HookReply) -> Void) {
         let sessionId = envelope.payload["session_id"]?.stringValue ?? "unknown"
+        let toolName = envelope.payload["tool_name"]?.stringValue
+        trace("recv \(envelope.event.rawValue)\(toolName.map { " tool=\($0)" } ?? "") session=\(sessionId.prefix(8))")
         // Every hook event refreshes the terminal identity of the session:
         // cheap, and self-heals if the user moves the session between tabs.
         if envelope.context.itermSessionId != nil || envelope.context.tty != nil {
@@ -75,21 +88,27 @@ final class InteractionCenter {
         let info = PreToolUseInfo(payload: envelope.payload)
 
         guard settings.interceptPermissions else {
+            trace("pretooluse \(info.toolName): passthrough (interception disabled)")
             reply(.passthrough)
             return
         }
         // Modes where Claude Code will not prompt anyway.
         if info.permissionMode == "bypassPermissions" {
+            trace("pretooluse \(info.toolName): passthrough (bypassPermissions mode)")
             reply(.passthrough)
             return
         }
         if info.permissionMode == "acceptEdits",
            ["Edit", "Write", "MultiEdit", "NotebookEdit"].contains(info.toolName) {
+            trace("pretooluse \(info.toolName): passthrough (acceptEdits mode)")
             reply(.passthrough)
             return
         }
-        // Allow-listed by the user's own Claude Code rules → no card.
-        if mirror(for: info.cwd).allows(toolName: info.toolName, toolInput: info.toolInput) {
+        // Allow-listed by the user's own Claude Code rules (and not vetoed
+        // by a deny/ask rule) → no card.
+        if case .autoAllowed(let rule) = mirror(for: info.cwd)
+            .verdict(toolName: info.toolName, toolInput: info.toolInput) {
+            trace("pretooluse \(info.toolName): passthrough (allow rule '\(rule)')")
             reply(.passthrough)
             return
         }
@@ -122,6 +141,7 @@ final class InteractionCenter {
             kind: kind,
             respond: reply
         )
+        trace("pretooluse \(info.toolName): card enqueued (\(interaction.title))")
         enqueue(interaction)
     }
 
@@ -170,6 +190,7 @@ final class InteractionCenter {
         guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
         let interaction = pending.remove(at: index)
         timeoutTasks.removeValue(forKey: id)?.cancel()
+        trace("resolve '\(interaction.title)' → \(reply.action.rawValue)")
         interaction.respond?(reply)
         onCardResolved?(interaction)
     }

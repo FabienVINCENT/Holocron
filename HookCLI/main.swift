@@ -16,7 +16,10 @@ import Foundation
 //   the wait times out, it exits 0 with no output — Claude Code's normal
 //   permission flow takes over. This binary must never wedge a session.
 
-func failOpen() -> Never {
+var eventName = "?"
+
+func failOpen(_ reason: String) -> Never {
+    HookDebugLog.appendSync("\(eventName): fail-open (\(reason))", to: "hook-client.log")
     exit(0)
 }
 
@@ -27,6 +30,8 @@ guard CommandLine.arguments.count >= 2,
     FileHandle.standardError.write(Data("usage: holocron-hook <event>\n".utf8))
     exit(0)
 }
+
+eventName = event.rawValue
 
 // MARK: - Read stdin payload
 
@@ -49,13 +54,13 @@ let socketPath = ProcessInfo.processInfo.environment["HOLOCRON_SOCKET"]
     ?? HookWire.socketURL().path
 
 let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-guard fd >= 0 else { failOpen() }
+guard fd >= 0 else { failOpen("socket() failed") }
 defer { close(fd) }
 
 var addr = sockaddr_un()
 addr.sun_family = sa_family_t(AF_UNIX)
 let pathBytes = socketPath.utf8CString
-guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else { failOpen() }
+guard pathBytes.count <= MemoryLayout.size(ofValue: addr.sun_path) else { failOpen("socket path too long") }
 withUnsafeMutableBytes(of: &addr.sun_path) { destination in
     pathBytes.withUnsafeBufferPointer { source in
         destination.copyMemory(from: UnsafeRawBufferPointer(
@@ -68,7 +73,7 @@ let connectResult = withUnsafePointer(to: &addr) { pointer in
         connect(fd, rebound, socklen_t(MemoryLayout<sockaddr_un>.size))
     }
 }
-guard connectResult == 0 else { failOpen() }
+guard connectResult == 0 else { failOpen("connect failed — app not running?") }
 
 // Send timeout: the app should drain instantly; do not linger.
 var sendTimeout = timeval(tv_sec: 5, tv_usec: 0)
@@ -85,7 +90,7 @@ setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, socklen_t(MemoryLayout<tim
 // MARK: - Send envelope
 
 let encoder = JSONEncoder()
-guard var messageData = try? encoder.encode(envelope) else { failOpen() }
+guard var messageData = try? encoder.encode(envelope) else { failOpen("envelope encoding failed") }
 messageData.append(UInt8(ascii: "\n"))
 
 var sent = 0
@@ -96,7 +101,7 @@ messageData.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
         sent += n
     }
 }
-guard sent == messageData.count else { failOpen() }
+guard sent == messageData.count else { failOpen("socket write failed") }
 
 // MARK: - Wait for reply (blocking events only)
 
@@ -106,15 +111,18 @@ var replyData = Data()
 var buffer = [UInt8](repeating: 0, count: 4096)
 while !replyData.contains(UInt8(ascii: "\n")) {
     let n = read(fd, &buffer, buffer.count)
-    if n <= 0 { failOpen() }  // timeout, EOF, or error → fail open
+    if n <= 0 { failOpen("no reply (timeout/EOF) after \(waitSeconds)s cap") }
     replyData.append(contentsOf: buffer[0..<n])
-    if replyData.count > 1024 * 1024 { failOpen() }
+    if replyData.count > 1024 * 1024 { failOpen("oversized reply") }
 }
 
-guard let newline = replyData.firstIndex(of: UInt8(ascii: "\n")) else { failOpen() }
+guard let newline = replyData.firstIndex(of: UInt8(ascii: "\n")) else { failOpen("malformed reply") }
 let line = replyData.subdata(in: replyData.startIndex..<newline)
-guard let reply = try? JSONDecoder().decode(HookReply.self, from: line) else { failOpen() }
+guard let reply = try? JSONDecoder().decode(HookReply.self, from: line) else { failOpen("reply decode failed") }
 
+HookDebugLog.appendSync(
+    "\(eventName): reply \(reply.action.rawValue) → \(reply.stdoutJSON() == nil ? "no output (normal flow)" : "hookSpecificOutput emitted")",
+    to: "hook-client.log")
 if let stdout = reply.stdoutJSON() {
     print(stdout)
 }
