@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import ServiceManagement
 import SwiftUI
 
 /// Composition root: owns every layer and wires them together. Created once
@@ -60,6 +61,11 @@ final class AppState {
 
         registerPanelHotkey()
         hooksInstalled = hookInstaller.isInstalled
+        if hooksInstalled {
+            // Keep the installed helper binary in sync with this app version
+            // (new hook features ship inside it, e.g. host markers for jump).
+            try? hookInstaller.copyHookBinary()
+        }
         offerHookInstallOnFirstRun()
     }
 
@@ -186,6 +192,24 @@ final class AppState {
 
     func togglePanel() {
         panelController?.toggle()
+    }
+
+    // MARK: - Launch at login (SMAppService)
+
+    var launchAtLoginEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            hookServerError = "Launch at login: \(error.localizedDescription)"
+        }
     }
 
     /// Settings render as a page INSIDE the notch panel — no separate

@@ -12,7 +12,7 @@ struct HolocronApp: App {
         )) {
             MenuContent(state: AppState.shared)
         } label: {
-            Image(systemName: "circle.hexagongrid.fill")
+            MenuBarLabel(state: AppState.shared)
         }
     }
 }
@@ -37,6 +37,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         Task { @MainActor in
             AppState.shared.shutdown()
+        }
+    }
+}
+
+/// Status item label: icon + pending-card count (only when > 0).
+struct MenuBarLabel: View {
+    let state: AppState
+
+    var body: some View {
+        let pending = state.center.pending.count
+        HStack(spacing: 2) {
+            Image(systemName: pending > 0
+                ? "exclamationmark.circle.fill"
+                : "circle.hexagongrid.fill")
+            if pending > 0 {
+                Text("\(pending)")
+            }
         }
     }
 }

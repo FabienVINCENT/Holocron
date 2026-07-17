@@ -13,7 +13,9 @@ your **Claude Code** agent sessions — including sessions orchestrated by
   hooks — with your existing allow-rules respected.
 - **Answer `AskUserQuestion`** with ⌘1…⌘4, review plans (Markdown) before
   approving.
-- **Jump to the exact iTerm2 tab/split** of any session.
+- **Jump to the session's host**: exact iTerm2 tab/split, Terminal.app tab,
+  PhpStorm/JetBrains project window, or the Claude desktop app — Orca
+  sessions route to wherever Orca runs.
 - **8-bit synthesized alerts** (permission, question, done, error) —
   per-event toggles.
 - **Token burn gauge** over the rolling 5-hour window.

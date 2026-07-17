@@ -54,23 +54,55 @@ struct CompactPillView: View {
     @ViewBuilder
     private func indicator(needsAttention: Bool, activeCount: Int) -> some View {
         if needsAttention {
-            ZStack {
-                Circle()
-                    .fill(Theme.color(for: .waitingPermission))
-                    .frame(width: 9, height: 9)
-                Circle()
-                    .stroke(Theme.color(for: .waitingPermission).opacity(0.5), lineWidth: 3)
-                    .frame(width: 15, height: 15)
-            }
+            // Urgent: fast red pulse with a halo.
+            PulsingDot(
+                color: Theme.color(for: .waitingPermission),
+                size: 9, halo: true, period: 0.55, minScale: 0.8, maxScale: 1.25
+            )
             .accessibilityLabel("Waiting for your decision")
         } else if activeCount > 0 {
-            Circle()
-                .fill(Theme.color(for: .running))
-                .frame(width: 7, height: 7)
+            // Alive: slow green breathing while agents work.
+            PulsingDot(
+                color: Theme.color(for: .running),
+                size: 7, halo: false, period: 1.3, minScale: 0.8, maxScale: 1.15
+            )
         } else {
             Circle()
                 .fill(Theme.textTertiary)
                 .frame(width: 7, height: 7)
         }
+    }
+}
+
+/// Breathing status dot — the "alive" signal of the compact pill.
+struct PulsingDot: View {
+    let color: Color
+    let size: CGFloat
+    let halo: Bool
+    let period: Double
+    let minScale: CGFloat
+    let maxScale: CGFloat
+    @State private var pulsing = false
+
+    var body: some View {
+        ZStack {
+            if halo {
+                Circle()
+                    .stroke(color.opacity(pulsing ? 0.15 : 0.55), lineWidth: 3)
+                    .frame(width: size + 7, height: size + 7)
+                    .scaleEffect(pulsing ? 1.25 : 0.9)
+            }
+            Circle()
+                .fill(color)
+                .frame(width: size, height: size)
+                .scaleEffect(pulsing ? maxScale : minScale)
+                .opacity(pulsing ? 1 : 0.65)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: period).repeatForever(autoreverses: true)) {
+                pulsing = true
+            }
+        }
+        .onDisappear { pulsing = false }
     }
 }

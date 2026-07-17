@@ -181,6 +181,10 @@ struct SettingsPanelView: View {
             row("⌘Y/⌘N & ⌘1…⌘4 while a card is pending", isOn: $settings.decisionHotkeysEnabled)
             row("macOS notification on new card", isOn: $settings.systemNotifications)
             row("Show menu bar icon", isOn: $settings.showMenuBarIcon)
+            row("Launch at login", isOn: Binding(
+                get: { state.launchAtLoginEnabled },
+                set: { state.setLaunchAtLogin($0) }
+            ))
         }
     }
 

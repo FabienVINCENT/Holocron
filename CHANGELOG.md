@@ -5,6 +5,22 @@ matching `## [x.y.z]` section by the release workflow.
 
 ## [Unreleased]
 
+## [0.2.0]
+
+### Added
+- Living pill: breathing green dot while agents run, fast red pulse with a
+  halo when a card awaits you; the menu bar icon shows the pending count.
+- Launch at login (Settings → Shortcuts & alerts).
+- Jump works across hosts: iTerm2 (exact tab/split), Terminal.app (tab by
+  tty), PhpStorm & other JetBrains IDEs (focus the project window), and
+  the official Claude desktop app (activate). Orca sessions route to
+  wherever Orca runs. Hooks now capture TERMINAL_EMULATOR and
+  __CFBundleIdentifier to identify the host.
+
+### Changed
+- The installed hook helper is refreshed automatically at app launch, so
+  hook-side improvements apply without a manual Reinstall.
+
 ## [0.1.7]
 
 ### Fixed
