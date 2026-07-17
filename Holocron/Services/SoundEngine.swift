@@ -57,7 +57,7 @@ final class SoundEngine {
 
     private func startEngineIfNeeded() {
         if sourceNode == nil {
-            let node = AVAudioSourceNode { [weak self] _, _, frameCount, audioBufferList -> OSStatus in
+            let node = AVAudioSourceNode { [weak self] _, _, frameCount, audioBufferList in
                 self?.render(frameCount: frameCount, audioBufferList: audioBufferList) ?? noErr
             }
             engine.attach(node)

@@ -73,8 +73,8 @@ final class TranscriptTail {
             isPartial = true
             // Skip to the next line boundary so we do not decode a torn line.
             try? handle.seek(toOffset: offset)
-            if let probe = try? handle.read(upToCount: 64 * 1024), let data = probe,
-               let newline = data.firstIndex(of: UInt8(ascii: "\n")) {
+            if let probe = try? handle.read(upToCount: 64 * 1024),
+               let newline = probe.firstIndex(of: UInt8(ascii: "\n")) {
                 offset += UInt64(newline) + 1
             }
         }
@@ -84,8 +84,7 @@ final class TranscriptTail {
         var lines: [TranscriptLine] = []
         while offset < size {
             let want = Int(min(1024 * 1024, size - offset))
-            guard let chunk = try? handle.read(upToCount: want), let data = chunk,
-                  !data.isEmpty else { break }
+            guard let data = try? handle.read(upToCount: want), !data.isEmpty else { break }
             offset += UInt64(data.count)
             lines.append(contentsOf: parser.feed(data))
         }
