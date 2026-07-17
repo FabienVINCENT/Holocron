@@ -61,12 +61,16 @@ final class NotchPanelController: NSObject {
         // Hover-to-expand via an AppKit tracking area: deterministic, unlike
         // SwiftUI onHover in a borderless panel that gets resized.
         // .inVisibleRect keeps it in sync with every window resize.
+        // .mouseMoved matters: entering the window outside the pill must not
+        // expand, but sliding from there onto the pill must — and no new
+        // mouseEntered fires in that case.
         hostingView.addTrackingArea(NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: nil
         ))
+        panel.acceptsMouseMovedEvents = true
 
         NotificationCenter.default.addObserver(
             self,
@@ -108,13 +112,16 @@ final class NotchPanelController: NSObject {
     }
 
     // Explicit selector names: NSTrackingArea sends `mouseEntered:` /
-    // `mouseExited:` to its owner, but Swift would export these methods as
-    // `mouseEnteredWith:` / `mouseExitedWith:` — never delivered.
+    // `mouseExited:` / `mouseMoved:` to its owner, but Swift would export
+    // these methods as `mouseEnteredWith:` etc. — never delivered.
     @objc(mouseEntered:)
     func mouseEntered(with event: NSEvent) {
-        if mode == .compact {
-            setMode(.expanded, pinned: false)
-        }
+        expandIfPointerOnPill()
+    }
+
+    @objc(mouseMoved:)
+    func mouseMoved(with event: NSEvent) {
+        expandIfPointerOnPill()
     }
 
     @objc(mouseExited:)
@@ -123,14 +130,44 @@ final class NotchPanelController: NSObject {
         // pointer watcher decides when to collapse.
     }
 
+    /// The window can transiently be LARGER than the visible pill (it keeps
+    /// the expanded size for 0.45s while the collapse animation plays), so
+    /// hovering the emptied area must not re-open the panel: only the pill
+    /// rectangle itself is a hover target.
+    private func expandIfPointerOnPill() {
+        guard mode == .compact else { return }
+        let size = state.compactSize
+        let frame = panel.frame
+        let pillRect = NSRect(
+            x: frame.midX - size.width / 2,
+            y: frame.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+        if pillRect.contains(NSEvent.mouseLocation) {
+            setMode(.expanded, pinned: false)
+        }
+    }
+
     private func setMode(_ newMode: Mode, pinned: Bool) {
         pinnedOpen = pinned && newMode == .expanded
         if mode != newMode {
             mode = newMode
-            // The SwiftUI content animates; the window is resized instantly
-            // (growing now, shrinking after the collapse animation played).
-            state.panelExpanded = newMode == .expanded
-            applyFrame(afterCollapseAnimation: newMode == .compact)
+            if newMode == .expanded {
+                // Grow the window FIRST (visually a no-op: the content still
+                // draws the pill), then start the spring on the next runloop
+                // tick so it plays inside a stable window. Resizing and
+                // animating in the same pass stutters.
+                applyFrame()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.mode == .expanded else { return }
+                    self.state.panelExpanded = true
+                }
+            } else {
+                // Collapse: spring now, shrink the window after it played.
+                state.panelExpanded = false
+                applyFrame(afterCollapseAnimation: true)
+            }
         }
         updatePointerWatch()
     }

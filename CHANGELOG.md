@@ -5,6 +5,16 @@ matching `## [x.y.z]` section by the release workflow.
 
 ## [Unreleased]
 
+## [0.1.7]
+
+### Fixed
+- First-hover expansion stutter: the window now grows before the spring
+  starts (next runloop tick), so every expansion plays inside a stable
+  window — the smooth path that previously only quick re-hovers hit.
+- Ghost hover zone while collapsing: only the pill rectangle is a hover
+  target, so brushing the area the panel just vacated no longer reopens
+  it (mouseMoved tracking added so sliding onto the pill still works).
+
 ## [0.1.6]
 
 ### Fixed
