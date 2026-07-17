@@ -1,0 +1,32 @@
+# Xcode
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# XcodeGen output — regenerate with `xcodegen generate`
+Holocron.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Release artifacts
+dist/
+*.dmg
+appcast.xml
+
+# Sparkle keys — NEVER commit the private key
+sparkle_private_key*
+*.pem

@@ -1,0 +1,94 @@
+# XcodeGen project definition — regenerate the Xcode project with:
+#   xcodegen generate
+# (brew install xcodegen)
+name: Holocron
+options:
+  bundleIdPrefix: fr.fabien-vincent
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    DEAD_CODE_STRIPPING: YES
+    # Ad-hoc signing: no Apple Developer ID for now (see README, Gatekeeper note).
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Holocron:
+    type: application
+    platform: macOS
+    sources:
+      - path: Holocron
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.fabien-vincent.holocron
+        INFOPLIST_FILE: Holocron/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Holocron/Resources/Holocron.entitlements
+        ENABLE_HARDENED_RUNTIME: NO
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+    dependencies:
+      - package: Sparkle
+      - target: holocron-hook
+        embed: false
+    postBuildScripts:
+      - name: Embed holocron-hook helper
+        script: |
+          HELPERS_DIR="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers"
+          mkdir -p "${HELPERS_DIR}"
+          cp -f "${BUILT_PRODUCTS_DIR}/holocron-hook" "${HELPERS_DIR}/holocron-hook"
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/holocron-hook
+
+  holocron-hook:
+    type: tool
+    platform: macOS
+    sources:
+      - path: HookCLI
+      # The IPC protocol (and its JSON model) is shared source between the
+      # app and the hook binary.
+      - path: Holocron/Core/Hooks/HookProtocol.swift
+      - path: Holocron/Core/Models/JSONValue.swift
+    settings:
+      base:
+        PRODUCT_NAME: holocron-hook
+        SKIP_INSTALL: YES
+
+  HolocronTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: HolocronTests
+      # Pure-logic sources are compiled directly into the test bundle so tests
+      # run without a host app (works headless on CI).
+      - path: Holocron/Core
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: fr.fabien-vincent.holocron.tests
+
+schemes:
+  Holocron:
+    build:
+      targets:
+        Holocron: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - HolocronTests
+    archive:
+      config: Release

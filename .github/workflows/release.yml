@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  SPARKLE_VERSION: "2.6.4"
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (Release)
+        run: |
+          xcodebuild -project Holocron.xcodeproj \
+            -scheme Holocron \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package DMG
+        run: ./scripts/make-dmg.sh build/Build/Products/Release/Holocron.app dist
+
+      - name: Download Sparkle tools
+        run: |
+          curl -fsSL -o sparkle.tar.xz \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+          mkdir -p sparkle-tools
+          tar -xf sparkle.tar.xz -C sparkle-tools
+
+      - name: Sign update & generate appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::SPARKLE_PRIVATE_KEY secret is not set (see docs/RELEASE.md)"
+            exit 1
+          fi
+          KEY_FILE=$(mktemp)
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$KEY_FILE"
+          TAG="${GITHUB_REF_NAME}"
+          ./sparkle-tools/bin/generate_appcast \
+            --ed-key-file "$KEY_FILE" \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" \
+            dist/
+          rm -f "$KEY_FILE"
+          ls -la dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/appcast.xml
+          generate_release_notes: true

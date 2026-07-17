@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Holocron is intentionally NOT sandboxed:
+	- reads ~/.claude/projects/**/*.jsonl (Claude Code transcripts)
+	- edits ~/.claude/settings.json (hook install/uninstall)
+	- listens on a Unix domain socket in ~/Library/Application Support/Holocron
+	- sends Apple Events to iTerm2 (jump to terminal)
+	-->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>
