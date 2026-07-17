@@ -5,6 +5,19 @@ matching `## [x.y.z]` section by the release workflow.
 
 ## [Unreleased]
 
+## [0.1.4]
+
+### Fixed
+- Expand/collapse oscillation: hover now only opens the panel; closing is
+  decided by a pointer-position watcher immune to the spurious exit events
+  emitted while the window resizes.
+- Settings window hardened: owned by an NSWindowController, created via
+  NSHostingController outside the notch panel's event dispatch.
+
+### Changed
+- Repo hygiene: the Sparkle tools distribution is no longer committed
+  (CI downloads it); `sparkle/` is ignored.
+
 ## [0.1.3]
 
 ### Fixed

@@ -187,27 +187,32 @@ final class AppState {
     /// Settings live in a plain NSWindow we own: the notch panel sits outside
     /// the SwiftUI scene hierarchy, where SettingsLink/openSettings actions
     /// don't exist (and the private showSettingsWindow: selector is dead on
-    /// Sequoia).
-    @ObservationIgnored private var settingsWindow: NSWindow?
+    /// Sequoia). The window is owned by an NSWindowController and created
+    /// outside the click's event dispatch (the click originates in a
+    /// non-activating borderless panel).
+    @ObservationIgnored private var settingsWindowController: NSWindowController?
 
     func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        if let settingsWindow {
-            settingsWindow.makeKeyAndOrderFront(nil)
-            return
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.settingsWindowController == nil {
+                let window = NSWindow(
+                    contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
+                    styleMask: [.titled, .closable, .miniaturizable],
+                    backing: .buffered,
+                    defer: false
+                )
+                window.title = "Holocron Settings"
+                window.isReleasedWhenClosed = false
+                window.contentViewController = NSHostingController(
+                    rootView: SettingsView(state: self))
+                window.center()
+                self.settingsWindowController = NSWindowController(window: window)
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            self.settingsWindowController?.showWindow(nil)
+            self.settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         }
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 460),
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Holocron Settings"
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: SettingsView(state: self))
-        window.center()
-        settingsWindow = window
-        window.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Hotkeys

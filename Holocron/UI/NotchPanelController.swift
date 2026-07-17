@@ -14,9 +14,16 @@ final class NotchPanelController: NSObject {
     private var panel: NSPanel!
     private var hostingView: NSHostingView<NotchRootView>!
     private let state: AppState
-    private var collapseWorkItem: DispatchWorkItem?
     /// Expanded because of a card or hotkey: don't collapse on mouse exit.
     private var pinnedOpen = false
+    /// Small debounce so brushing past the pill doesn't expand it.
+    private var expandWorkItem: DispatchWorkItem?
+    /// While expanded (and not pinned), a timer polls the real pointer
+    /// position to decide when to collapse. SwiftUI's onHover exit events
+    /// misfire while the window/tracking areas resize, which caused an
+    /// expand/collapse oscillation — so hover only ever OPENS the panel.
+    private var pointerWatchTimer: Timer?
+    private var pointerOutsideTicks = 0
 
     static let compactFallbackSize = NSSize(width: 240, height: 34)
     static let expandedSize = NSSize(width: 460, height: 540)
@@ -83,39 +90,69 @@ final class NotchPanelController: NSObject {
         setMode(.expanded, pinned: true)
     }
 
-    /// Cards resolved: allow collapse (unless the pointer is inside).
+    /// Cards resolved: allow collapse again (the pointer watcher takes over).
     func releaseAttention() {
         pinnedOpen = false
-        scheduleCollapse(after: 0.8)
+        updatePointerWatch()
     }
 
     private func hoverChanged(_ hovering: Bool) {
-        if hovering {
-            collapseWorkItem?.cancel()
-            if mode == .compact { setMode(.expanded, pinned: false) }
-        } else if !pinnedOpen {
-            scheduleCollapse(after: 0.35)
-        }
-    }
-
-    private func scheduleCollapse(after delay: TimeInterval) {
-        collapseWorkItem?.cancel()
+        // Hover only OPENS. Closing is decided by the pointer watcher, which
+        // is immune to the spurious exit events AppKit emits while the
+        // window resizes.
+        expandWorkItem?.cancel()
+        guard hovering, mode == .compact else { return }
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.pinnedOpen else { return }
-            self.setMode(.compact, pinned: false)
+            guard let self, self.mode == .compact else { return }
+            self.setMode(.expanded, pinned: false)
         }
-        collapseWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        expandWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
 
     private func setMode(_ newMode: Mode, pinned: Bool) {
         pinnedOpen = pinned && newMode == .expanded
-        guard mode != newMode else { return }
-        mode = newMode
-        // The SwiftUI content animates; the window is resized instantly
-        // (growing now, shrinking after the collapse animation has played).
-        state.panelExpanded = newMode == .expanded
-        applyFrame(afterCollapseAnimation: newMode == .compact)
+        if mode != newMode {
+            mode = newMode
+            // The SwiftUI content animates; the window is resized instantly
+            // (growing now, shrinking after the collapse animation played).
+            state.panelExpanded = newMode == .expanded
+            applyFrame(afterCollapseAnimation: newMode == .compact)
+        }
+        updatePointerWatch()
+    }
+
+    // MARK: - Pointer watcher (collapse decision)
+
+    private func updatePointerWatch() {
+        let shouldWatch = mode == .expanded && !pinnedOpen
+        if shouldWatch {
+            guard pointerWatchTimer == nil else { return }
+            pointerOutsideTicks = 0
+            pointerWatchTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { _ in
+                Task { @MainActor [weak self] in self?.pointerTick() }
+            }
+        } else {
+            pointerWatchTimer?.invalidate()
+            pointerWatchTimer = nil
+        }
+    }
+
+    private func pointerTick() {
+        guard mode == .expanded, !pinnedOpen else {
+            updatePointerWatch()
+            return
+        }
+        // NSEvent.mouseLocation and panel.frame share screen coordinates.
+        let zone = panel.frame.insetBy(dx: -12, dy: -12)
+        if zone.contains(NSEvent.mouseLocation) {
+            pointerOutsideTicks = 0
+        } else {
+            pointerOutsideTicks += 1
+            if pointerOutsideTicks >= 2 {
+                setMode(.compact, pinned: false)
+            }
+        }
     }
 
     @objc private func screensChanged() {
