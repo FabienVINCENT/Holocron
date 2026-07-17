@@ -173,7 +173,13 @@ private struct AdvancedSettingsTab: View {
     var body: some View {
         Form {
             Section {
-                Button("Check for updates…") { state.updater?.checkForUpdates() }
+                if state.updater?.isConfigured == true {
+                    Button("Check for updates…") { state.updater?.checkForUpdates() }
+                        .disabled(state.updater?.canCheckForUpdates != true)
+                } else {
+                    Text("Updater disabled: no Sparkle public key in this build (see docs/RELEASE.md).")
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Updates (Sparkle)")
             } footer: {

@@ -53,7 +53,10 @@ struct MenuContent: View {
         } else {
             Button("Install Claude Code hooks") { state.installHooks() }
         }
-        Button("Check for updates…") { state.updater?.checkForUpdates() }
+        if state.updater?.isConfigured == true {
+            Button("Check for updates…") { state.updater?.checkForUpdates() }
+                .disabled(state.updater?.canCheckForUpdates != true)
+        }
 
         Divider()
 
