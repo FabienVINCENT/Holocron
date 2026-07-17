@@ -5,6 +5,15 @@ matching `## [x.y.z]` section by the release workflow.
 
 ## [Unreleased]
 
+## [0.2.2]
+
+### Fixed
+- Dead sessions no longer clutter the list: a 30s liveness sweep checks
+  whether each session's claude process still exists (hook-captured PID,
+  cwd fallback). Ended/dead sessions show as done for 3 minutes, then
+  drop out — closing a terminal never wrote anything to the transcript,
+  so they used to linger as idle/running for the whole retention window.
+
 ## [0.2.1]
 
 ### Fixed

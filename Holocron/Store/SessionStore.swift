@@ -9,12 +9,16 @@ import Observation
 final class SessionStore {
     private(set) var sessions: [AgentSession] = []
     private(set) var attachments: [String: TerminalAttachment] = [:]
+    /// Sessions whose claude process no longer exists (liveness sweep).
+    private(set) var deadSessionIds: Set<String> = []
 
     let settings: AppSettings
 
     @ObservationIgnored private var watcher: TranscriptWatcher
     @ObservationIgnored private let pipeline = TranscriptPipeline()
     @ObservationIgnored private var refreshTimer: Timer?
+    @ObservationIgnored private let livenessQueue = DispatchQueue(
+        label: "fr.fabien-vincent.holocron.liveness", qos: .utility)
 
     private var attachmentsFileURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -40,11 +44,45 @@ final class SessionStore {
         watcher.start()
         pipeline.ingest(urls: watcher.scanExistingTranscripts())
 
-        // Time-based statuses (idle, retention) need a slow heartbeat.
+        // Heartbeat: time-derived statuses + liveness sweep.
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.sessions = self.sessions  // re-publish for time-derived UI
+                self.sweepLiveness()
+            }
+        }
+        sweepLiveness()
+    }
+
+    /// Marks sessions whose claude process is gone (closed terminal, kill…):
+    /// the transcript carries no "process died" marker, so without this
+    /// sweep dead sessions linger as idle/running until retention expires.
+    private func sweepLiveness() {
+        let candidates = sessions.map { session in
+            (id: session.id, cwd: session.cwd, pid: attachments[session.id]?.claudePid)
+        }
+        guard !candidates.isEmpty else { return }
+        livenessQueue.async { [weak self] in
+            let processes = ProcessLocator.runningClaudeProcesses()
+            let liveCwds = Set(processes.map(\.cwd))
+            let livePids = Set(processes.map(\.pid))
+            var dead: Set<String> = []
+            for candidate in candidates {
+                if let pid = candidate.pid {
+                    // PID known via hooks: authoritative, with cwd fallback
+                    // for sessions resumed under a new process.
+                    let pidAlive = livePids.contains(pid)
+                        || kill(pid, 0) == 0 || errno == EPERM
+                    if pidAlive { continue }
+                    if let cwd = candidate.cwd, liveCwds.contains(cwd) { continue }
+                    dead.insert(candidate.id)
+                } else if let cwd = candidate.cwd {
+                    if !liveCwds.contains(cwd) { dead.insert(candidate.id) }
+                }
+            }
+            Task { @MainActor [weak self] in
+                self?.deadSessionIds = dead
             }
         }
     }
@@ -76,14 +114,19 @@ final class SessionStore {
 
     // MARK: - Display helpers
 
-    /// Sessions worth showing, most urgent first.
+    /// Sessions worth showing, most urgent first. Ended/dead sessions get a
+    /// 3-minute grace period (long enough to see them finish) then drop out.
     func displaySessions(pendingSessionIds: Set<String>, now: Date = Date()) -> [AgentSession] {
         let retention = TimeInterval(settings.retentionHours) * 3600
         let idleAfter = TimeInterval(settings.idleAfterMinutes) * 60
         return sessions
             .filter { session in
                 guard let last = session.lastActivityAt else { return false }
-                return now.timeIntervalSince(last) < retention
+                guard now.timeIntervalSince(last) < retention else { return false }
+                if pendingSessionIds.contains(session.id) { return true }
+                let ended = session.endedByHook || deadSessionIds.contains(session.id)
+                if ended, now.timeIntervalSince(last) > 180 { return false }
+                return true
             }
             .sorted { a, b in
                 let aPending = pendingSessionIds.contains(a.id)
@@ -103,6 +146,7 @@ final class SessionStore {
             case .permission, .terminalPrompt: return .waitingPermission
             }
         }
+        if deadSessionIds.contains(session.id) { return .done }
         let idleAfter = TimeInterval(settings.idleAfterMinutes) * 60
         return session.inferredStatus(now: now, idleAfter: idleAfter)
     }
