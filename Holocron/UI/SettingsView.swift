@@ -62,6 +62,9 @@ private struct GeneralSettingsTab: View {
             Section("Alerts") {
                 Toggle("macOS notification when a card appears", isOn: $settings.systemNotifications)
             }
+            Section("Menu bar") {
+                Toggle("Show menu bar icon", isOn: $settings.showMenuBarIcon)
+            }
         }
         .formStyle(.grouped)
     }

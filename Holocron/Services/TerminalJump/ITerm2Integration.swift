@@ -16,18 +16,22 @@ struct ITerm2Integration: TerminalIntegration {
     let name = "iTerm2"
 
     func canHandle(_ attachment: TerminalAttachment?) -> Bool {
-        guard let attachment else { return false }
-        if attachment.termProgram == "iTerm.app" { return true }
-        // Older attachments may miss TERM_PROGRAM; try if we have any handle.
-        return attachment.itermGUID != nil || attachment.tty != nil
+        // v1: iTerm2 is the only integration and it has a hook-free cwd
+        // fallback, so it always takes the attempt.
+        true
     }
 
     func jump(to attachment: TerminalAttachment?, cwd: String?) throws {
-        guard let attachment else { throw TerminalJumpError.sessionNotFound("no terminal recorded") }
-        let guid = sanitize(attachment.itermGUID)
-        let tty = sanitize(attachment.tty)
+        let guid = sanitize(attachment?.itermGUID)
+        var tty = sanitize(attachment?.tty)
+        if guid == nil, tty == nil, let cwd {
+            // No hook ever saw this session: locate the claude process by cwd.
+            tty = sanitize(ProcessLocator.ttyOfClaudeProcess(cwd: cwd))
+        }
         guard guid != nil || tty != nil else {
-            throw TerminalJumpError.sessionNotFound("no GUID or tty recorded yet — run one agent turn first")
+            throw TerminalJumpError.sessionNotFound(
+                "no ITERM_SESSION_ID/tty recorded and no running claude process matches "
+                + (cwd ?? "this session"))
         }
 
         let script = """

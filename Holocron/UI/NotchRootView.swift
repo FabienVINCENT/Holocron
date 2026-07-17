@@ -1,35 +1,45 @@
 import SwiftUI
 
-/// Root view hosted in the notch panel. The panel window is resized by
-/// `NotchPanelController`; this view just fills it and renders either the
-/// compact pill or the expanded board.
+/// Root view hosted in the notch panel. The window itself is resized
+/// instantly by `NotchPanelController`; ALL visible motion happens here in
+/// SwiftUI (the shaped content springs between pill and panel sizes), which
+/// keeps the animation fluid and glued to the top edge.
 struct NotchRootView: View {
     let state: AppState
     var onHoverChange: (Bool) -> Void
     var onTogglePin: () -> Void
 
     var body: some View {
-        ZStack(alignment: .top) {
-            NotchShape(bottomRadius: state.panelExpanded ? Theme.cornerRadius : 12)
-                .fill(Theme.background)
-                .overlay(
-                    NotchShape(bottomRadius: state.panelExpanded ? Theme.cornerRadius : 12)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                )
+        let target: CGSize = state.panelExpanded
+            ? CGSize(width: NotchPanelController.expandedSize.width,
+                     height: NotchPanelController.expandedSize.height)
+            : CGSize(width: state.compactSize.width, height: state.compactSize.height)
 
-            if state.panelExpanded {
-                ExpandedPanelView(state: state)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
-            } else {
-                CompactPillView(state: state)
-                    .transition(.opacity)
+        ZStack(alignment: .top) {
+            ZStack(alignment: .top) {
+                NotchShape(bottomRadius: state.panelExpanded ? Theme.cornerRadius : 12)
+                    .fill(Theme.background)
+                    .overlay(
+                        NotchShape(bottomRadius: state.panelExpanded ? Theme.cornerRadius : 12)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                    )
+
+                if state.panelExpanded {
+                    ExpandedPanelView(state: state)
+                        .transition(.opacity)
+                } else {
+                    CompactPillView(state: state)
+                        .transition(.opacity)
+                }
             }
+            .frame(width: target.width, height: target.height)
+            .onHover(perform: onHoverChange)
+            .onTapGesture {
+                if !state.panelExpanded { onTogglePin() }
+            }
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: state.panelExpanded)
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: state.panelExpanded)
-        .onHover(perform: onHoverChange)
-        .onTapGesture {
-            if !state.panelExpanded { onTogglePin() }
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .preferredColorScheme(.dark)
     }
 }

@@ -59,7 +59,7 @@ final class NotchPanelController: NSObject {
     }
 
     func show() {
-        applyFrame(animated: false)
+        applyFrame()
         panel.orderFrontRegardless()
     }
 
@@ -112,12 +112,14 @@ final class NotchPanelController: NSObject {
         pinnedOpen = pinned && newMode == .expanded
         guard mode != newMode else { return }
         mode = newMode
+        // The SwiftUI content animates; the window is resized instantly
+        // (growing now, shrinking after the collapse animation has played).
         state.panelExpanded = newMode == .expanded
-        applyFrame(animated: true)
+        applyFrame(afterCollapseAnimation: newMode == .compact)
     }
 
     @objc private func screensChanged() {
-        applyFrame(animated: false)
+        applyFrame()
     }
 
     // MARK: - Geometry
@@ -127,7 +129,7 @@ final class NotchPanelController: NSObject {
         NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
     }
 
-    private func applyFrame(animated: Bool) {
+    private func applyFrame(afterCollapseAnimation: Bool = false) {
         guard let screen = targetScreen else { return }
         let hasNotch = screen.safeAreaInsets.top > 0
         state.screenHasNotch = hasNotch
@@ -144,17 +146,20 @@ final class NotchPanelController: NSObject {
         state.compactSize = compactSize
 
         let size = mode == .compact ? compactSize : Self.expandedSize
-        let origin = NSPoint(
-            x: screen.frame.midX - size.width / 2,
-            y: screen.frame.maxY - size.height
+        let frame = NSRect(
+            origin: NSPoint(
+                x: screen.frame.midX - size.width / 2,
+                y: screen.frame.maxY - size.height
+            ),
+            size: size
         )
-        let frame = NSRect(origin: origin, size: size)
 
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.28
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                panel.animator().setFrame(frame, display: true)
+        if afterCollapseAnimation {
+            // Keep the large window while the SwiftUI collapse spring plays,
+            // then shrink so the invisible area stops swallowing clicks.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                guard let self, self.mode == .compact else { return }
+                self.panel.setFrame(frame, display: true)
             }
         } else {
             panel.setFrame(frame, display: true)

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import SwiftUI
 
 /// Composition root: owns every layer and wires them together. Created once
 /// at launch; UI reads it via Observation.
@@ -183,13 +184,30 @@ final class AppState {
         panelController?.toggle()
     }
 
-    /// Opens the Settings scene from outside the SwiftUI scene hierarchy
-    /// (the notch panel). Selector names differ across macOS releases.
+    /// Settings live in a plain NSWindow we own: the notch panel sits outside
+    /// the SwiftUI scene hierarchy, where SettingsLink/openSettings actions
+    /// don't exist (and the private showSettingsWindow: selector is dead on
+    /// Sequoia).
+    @ObservationIgnored private var settingsWindow: NSWindow?
+
     func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
-            _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            return
         }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 460),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Holocron Settings"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: SettingsView(state: self))
+        window.center()
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Hotkeys

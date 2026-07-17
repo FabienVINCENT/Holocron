@@ -5,14 +5,14 @@ struct HolocronApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
+        let settings = AppState.shared.settings
+        MenuBarExtra(isInserted: Binding(
+            get: { settings.showMenuBarIcon },
+            set: { settings.showMenuBarIcon = $0 }
+        )) {
             MenuContent(state: AppState.shared)
         } label: {
             Image(systemName: "circle.hexagongrid.fill")
-        }
-
-        Settings {
-            SettingsView(state: AppState.shared)
         }
     }
 }
@@ -57,7 +57,7 @@ struct MenuContent: View {
 
         Divider()
 
-        SettingsLink { Text("Settings…") }
+        Button("Settings…") { state.openSettings() }
         Button("Quit Holocron") { NSApp.terminate(nil) }
     }
 }
