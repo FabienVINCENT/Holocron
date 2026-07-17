@@ -27,12 +27,24 @@
 
 ## Cutting a release
 
+Three equivalent triggers:
+
 ```sh
+# A. Tag push (classic)
 # bump MARKETING_VERSION (and CURRENT_PROJECT_VERSION) in project.yml
 git commit -am "release: 0.2.0"
 git tag v0.2.0
 git push origin main v0.2.0
+
+# B. VERSION file bump (works where tag pushes are blocked, e.g. remote
+#    Claude Code sessions): edit VERSION, commit, push. auto-release.yml
+#    builds and creates the tag v<VERSION> itself at that commit.
+
+# C. Manual: Actions → Release → Run workflow, with the tag as input.
 ```
+
+Keep `VERSION` and `MARKETING_VERSION` (project.yml) in sync — the DMG file
+name comes from MARKETING_VERSION, the tag from VERSION.
 
 The `release.yml` workflow then: builds Release → packages
 `Holocron-<version>.dmg` (`scripts/make-dmg.sh`, hdiutil) → signs it and

@@ -1,0 +1,30 @@
+name: Auto Release
+
+# Bump the VERSION file on a branch → a release is cut automatically:
+# the release workflow builds the DMG and creates the tag v<VERSION>
+# (via the release action) at this commit.
+on:
+  push:
+    branches: ["main", "claude/**"]
+    paths: ["VERSION"]
+
+permissions:
+  contents: write
+
+jobs:
+  compute-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: echo "tag=v$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: compute-tag
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.compute-tag.outputs.tag }}

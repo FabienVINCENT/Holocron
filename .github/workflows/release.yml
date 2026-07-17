@@ -10,6 +10,12 @@ on:
       tag:
         description: "Release tag (e.g. v0.1.0)"
         required: true
+  # Called by auto-release.yml when the VERSION file changes on a branch.
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
 
 permissions:
   contents: write
@@ -60,7 +66,7 @@ jobs:
           tar -xf sparkle.tar.xz -C sparkle-tools
           KEY_FILE=$(mktemp)
           printf '%s' "$SPARKLE_PRIVATE_KEY" > "$KEY_FILE"
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${{ inputs.tag || github.ref_name }}"
           ./sparkle-tools/bin/generate_appcast \
             --ed-key-file "$KEY_FILE" \
             --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" \
@@ -71,7 +77,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             dist/*.dmg
             dist/appcast.xml
