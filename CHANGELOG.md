@@ -5,6 +5,18 @@ matching `## [x.y.z]` section by the release workflow.
 
 ## [Unreleased]
 
+## [0.1.5]
+
+### Fixed
+- Hover-to-expand now uses an AppKit tracking area (SwiftUI onHover missed
+  most entries in the borderless panel) — opens reliably, no entry delay.
+- Dynamic-Island-style transition: pill and board stay mounted at fixed
+  sizes; only the clip shape animates. No more content re-layout churn.
+- Settings no longer open a separate window (the repeated crash source):
+  they render as a page inside the notch panel, with a close button.
+- A stale hung instance is terminated at launch (it used to swallow all
+  hover/clicks with an invisible stacked panel).
+
 ## [0.1.4]
 
 ### Fixed

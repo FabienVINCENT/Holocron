@@ -1,43 +1,52 @@
 import SwiftUI
 
-/// Root view hosted in the notch panel. The window itself is resized
-/// instantly by `NotchPanelController`; ALL visible motion happens here in
-/// SwiftUI (the shaped content springs between pill and panel sizes), which
-/// keeps the animation fluid and glued to the top edge.
+/// Root view hosted in the notch panel.
+///
+/// Animation recipe: both the pill and the expanded board stay mounted at
+/// their FIXED layout sizes; only the container (and its clip shape)
+/// springs between the two sizes, revealing the content — no re-layout
+/// churn during the transition. The window itself is resized instantly by
+/// `NotchPanelController`; hover detection lives there too (AppKit
+/// tracking area — SwiftUI's onHover misfires in borderless panels).
 struct NotchRootView: View {
     let state: AppState
-    var onHoverChange: (Bool) -> Void
     var onTogglePin: () -> Void
 
     var body: some View {
-        let target: CGSize = state.panelExpanded
-            ? CGSize(width: NotchPanelController.expandedSize.width,
-                     height: NotchPanelController.expandedSize.height)
-            : CGSize(width: state.compactSize.width, height: state.compactSize.height)
+        let expanded = state.panelExpanded
+        let compact = CGSize(width: state.compactSize.width, height: state.compactSize.height)
+        let full = CGSize(width: NotchPanelController.expandedSize.width,
+                          height: NotchPanelController.expandedSize.height)
+        let target = expanded ? full : compact
+        let radius: CGFloat = expanded ? Theme.cornerRadius : 12
 
         ZStack(alignment: .top) {
             ZStack(alignment: .top) {
-                NotchShape(bottomRadius: state.panelExpanded ? Theme.cornerRadius : 12)
+                NotchShape(bottomRadius: radius)
                     .fill(Theme.background)
-                    .overlay(
-                        NotchShape(bottomRadius: state.panelExpanded ? Theme.cornerRadius : 12)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                    )
 
-                if state.panelExpanded {
-                    ExpandedPanelView(state: state)
-                        .transition(.opacity)
-                } else {
-                    CompactPillView(state: state)
-                        .transition(.opacity)
-                }
+                ExpandedPanelView(state: state)
+                    .frame(width: full.width, height: full.height, alignment: .top)
+                    .opacity(expanded ? 1 : 0)
+                    .allowsHitTesting(expanded)
+
+                CompactPillView(state: state)
+                    .frame(width: compact.width, height: compact.height)
+                    .opacity(expanded ? 0 : 1)
+                    .allowsHitTesting(!expanded)
             }
-            .frame(width: target.width, height: target.height)
-            .onHover(perform: onHoverChange)
+            .frame(width: target.width, height: target.height, alignment: .top)
+            .clipShape(NotchShape(bottomRadius: radius))
+            .overlay(
+                NotchShape(bottomRadius: radius)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                    .frame(width: target.width, height: target.height)
+            )
+            .contentShape(Rectangle())
             .onTapGesture {
-                if !state.panelExpanded { onTogglePin() }
+                if !expanded { onTogglePin() }
             }
-            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: state.panelExpanded)
+            .animation(.spring(response: 0.3, dampingFraction: 0.9), value: expanded)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .preferredColorScheme(.dark)

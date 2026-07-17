@@ -10,14 +10,18 @@ struct ExpandedPanelView: View {
                 // Keep the header clear of the hardware notch.
                 .padding(.top, state.screenHasNotch ? 34 : 10)
 
-            if let card = state.center.frontCard {
-                InteractionCardView(state: state, card: card)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+            if state.showingSettings {
+                SettingsPanelView(state: state)
+            } else {
+                if let card = state.center.frontCard {
+                    InteractionCardView(state: state, card: card)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                sessionList
+
+                UsageFooterView(state: state)
             }
-
-            sessionList
-
-            UsageFooterView(state: state)
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 12)
@@ -52,12 +56,14 @@ struct ExpandedPanelView: View {
                 .foregroundStyle(Theme.color(for: .waitingQuestion))
                 .help("Permissions won't reach the notch until Claude Code hooks are installed.")
             }
-            // Not SettingsLink: this view lives in an NSPanel outside the
-            // SwiftUI scene hierarchy, where the openSettings action is absent.
             Button {
-                state.openSettings()
+                if state.showingSettings {
+                    state.closeSettings()
+                } else {
+                    state.openSettings()
+                }
             } label: {
-                Image(systemName: "gearshape")
+                Image(systemName: state.showingSettings ? "xmark.circle.fill" : "gearshape")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.textSecondary)
             }

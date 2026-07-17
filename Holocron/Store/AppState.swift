@@ -27,6 +27,7 @@ final class AppState {
     var panelExpanded = false
     var screenHasNotch = false
     var compactSize = NotchPanelController.compactFallbackSize
+    var showingSettings = false
     var hooksInstalled = false
     var hookServerError: String?
     var lastJumpError: String?
@@ -100,7 +101,10 @@ final class AppState {
             guard let self else { return }
             if self.center.pending.isEmpty {
                 self.unregisterDecisionHotkeys()
-                self.panelController?.releaseAttention()
+                // Keep the panel pinned while the settings page is open.
+                if !self.showingSettings {
+                    self.panelController?.releaseAttention()
+                }
             } else {
                 self.registerDecisionHotkeys()  // rebind to the new front card
             }
@@ -184,34 +188,18 @@ final class AppState {
         panelController?.toggle()
     }
 
-    /// Settings live in a plain NSWindow we own: the notch panel sits outside
-    /// the SwiftUI scene hierarchy, where SettingsLink/openSettings actions
-    /// don't exist (and the private showSettingsWindow: selector is dead on
-    /// Sequoia). The window is owned by an NSWindowController and created
-    /// outside the click's event dispatch (the click originates in a
-    /// non-activating borderless panel).
-    @ObservationIgnored private var settingsWindowController: NSWindowController?
-
+    /// Settings render as a page INSIDE the notch panel — no separate
+    /// window, no app activation, nothing to crash. (Separate NSWindows
+    /// spawned from the non-activating panel proved crash-prone.)
     func openSettings() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            if self.settingsWindowController == nil {
-                let window = NSWindow(
-                    contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
-                    styleMask: [.titled, .closable, .miniaturizable],
-                    backing: .buffered,
-                    defer: false
-                )
-                window.title = "Holocron Settings"
-                window.isReleasedWhenClosed = false
-                window.contentViewController = NSHostingController(
-                    rootView: SettingsView(state: self))
-                window.center()
-                self.settingsWindowController = NSWindowController(window: window)
-            }
-            NSApp.activate(ignoringOtherApps: true)
-            self.settingsWindowController?.showWindow(nil)
-            self.settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+        showingSettings = true
+        panelController?.presentAttention()  // pin the panel open
+    }
+
+    func closeSettings() {
+        showingSettings = false
+        if center.pending.isEmpty {
+            panelController?.releaseAttention()
         }
     }
 

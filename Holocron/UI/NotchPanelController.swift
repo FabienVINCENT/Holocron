@@ -16,12 +16,9 @@ final class NotchPanelController: NSObject {
     private let state: AppState
     /// Expanded because of a card or hotkey: don't collapse on mouse exit.
     private var pinnedOpen = false
-    /// Small debounce so brushing past the pill doesn't expand it.
-    private var expandWorkItem: DispatchWorkItem?
     /// While expanded (and not pinned), a timer polls the real pointer
-    /// position to decide when to collapse. SwiftUI's onHover exit events
-    /// misfire while the window/tracking areas resize, which caused an
-    /// expand/collapse oscillation — so hover only ever OPENS the panel.
+    /// position to decide when to collapse. Hover events only ever OPEN the
+    /// panel (exit events misfire while the window resizes).
     private var pointerWatchTimer: Timer?
     private var pointerOutsideTicks = 0
 
@@ -51,11 +48,20 @@ final class NotchPanelController: NSObject {
 
         let root = NotchRootView(
             state: state,
-            onHoverChange: { [weak self] hovering in self?.hoverChanged(hovering) },
             onTogglePin: { [weak self] in self?.toggle() }
         )
         hostingView = NSHostingView(rootView: root)
         panel.contentView = hostingView
+
+        // Hover-to-expand via an AppKit tracking area: deterministic, unlike
+        // SwiftUI onHover in a borderless panel that gets resized.
+        // .inVisibleRect keeps it in sync with every window resize.
+        hostingView.addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
 
         NotificationCenter.default.addObserver(
             self,
@@ -96,18 +102,15 @@ final class NotchPanelController: NSObject {
         updatePointerWatch()
     }
 
-    private func hoverChanged(_ hovering: Bool) {
-        // Hover only OPENS. Closing is decided by the pointer watcher, which
-        // is immune to the spurious exit events AppKit emits while the
-        // window resizes.
-        expandWorkItem?.cancel()
-        guard hovering, mode == .compact else { return }
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, self.mode == .compact else { return }
-            self.setMode(.expanded, pinned: false)
+    @objc func mouseEntered(with event: NSEvent) {
+        if mode == .compact {
+            setMode(.expanded, pinned: false)
         }
-        expandWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    @objc func mouseExited(with event: NSEvent) {
+        // Ignored on purpose: exit events misfire during resizes. The
+        // pointer watcher decides when to collapse.
     }
 
     private func setMode(_ newMode: Mode, pinned: Bool) {
