@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Manual release: creates the tag (via the release action) at the chosen
+  # ref — useful when tags cannot be pushed directly.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0)"
+        required: true
 
 permissions:
   contents: write
@@ -53,7 +60,7 @@ jobs:
           tar -xf sparkle.tar.xz -C sparkle-tools
           KEY_FILE=$(mktemp)
           printf '%s' "$SPARKLE_PRIVATE_KEY" > "$KEY_FILE"
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           ./sparkle-tools/bin/generate_appcast \
             --ed-key-file "$KEY_FILE" \
             --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" \
@@ -64,6 +71,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             dist/*.dmg
             dist/appcast.xml
