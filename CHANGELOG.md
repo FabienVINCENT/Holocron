@@ -5,6 +5,16 @@ matching `## [x.y.z]` section by the release workflow.
 
 ## [Unreleased]
 
+## [0.1.6]
+
+### Fixed
+- The expanding panel no longer detaches and floats below the screen top:
+  NSHostingView's default sizing constraints were fighting the window
+  frame (sizingOptions = []).
+- Hover-to-expand actually fires: the tracking-area owner methods were
+  exported with Swift-mangled selectors (mouseEnteredWith:) that AppKit
+  never sends; explicit @objc(mouseEntered:) names fix delivery.
+
 ## [0.1.5]
 
 ### Fixed

@@ -51,6 +51,11 @@ final class NotchPanelController: NSObject {
             onTogglePin: { [weak self] in self?.toggle() }
         )
         hostingView = NSHostingView(rootView: root)
+        // CRITICAL: by default NSHostingView installs Auto Layout constraints
+        // that drive the WINDOW's size from the SwiftUI content size. They
+        // fight our setFrame() calls and leave the panel detached below the
+        // screen top while the content springs. The window frame is ours.
+        hostingView.sizingOptions = []
         panel.contentView = hostingView
 
         // Hover-to-expand via an AppKit tracking area: deterministic, unlike
@@ -102,13 +107,18 @@ final class NotchPanelController: NSObject {
         updatePointerWatch()
     }
 
-    @objc func mouseEntered(with event: NSEvent) {
+    // Explicit selector names: NSTrackingArea sends `mouseEntered:` /
+    // `mouseExited:` to its owner, but Swift would export these methods as
+    // `mouseEnteredWith:` / `mouseExitedWith:` — never delivered.
+    @objc(mouseEntered:)
+    func mouseEntered(with event: NSEvent) {
         if mode == .compact {
             setMode(.expanded, pinned: false)
         }
     }
 
-    @objc func mouseExited(with event: NSEvent) {
+    @objc(mouseExited:)
+    func mouseExited(with event: NSEvent) {
         // Ignored on purpose: exit events misfire during resizes. The
         // pointer watcher decides when to collapse.
     }
