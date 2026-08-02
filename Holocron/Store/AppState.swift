@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
 import Observation
+import ServiceManagement
+import SwiftUI
 
 /// Composition root: owns every layer and wires them together. Created once
 /// at launch; UI reads it via Observation.
@@ -26,6 +28,7 @@ final class AppState {
     var panelExpanded = false
     var screenHasNotch = false
     var compactSize = NotchPanelController.compactFallbackSize
+    var showingSettings = false
     var hooksInstalled = false
     var hookServerError: String?
     var lastJumpError: String?
@@ -58,6 +61,11 @@ final class AppState {
 
         registerPanelHotkey()
         hooksInstalled = hookInstaller.isInstalled
+        if hooksInstalled {
+            // Keep the installed helper binary in sync with this app version
+            // (new hook features ship inside it, e.g. host markers for jump).
+            try? hookInstaller.copyHookBinary()
+        }
         offerHookInstallOnFirstRun()
     }
 
@@ -99,7 +107,10 @@ final class AppState {
             guard let self else { return }
             if self.center.pending.isEmpty {
                 self.unregisterDecisionHotkeys()
-                self.panelController?.releaseAttention()
+                // Keep the panel pinned while the settings page is open.
+                if !self.showingSettings {
+                    self.panelController?.releaseAttention()
+                }
             } else {
                 self.registerDecisionHotkeys()  // rebind to the new front card
             }
@@ -183,12 +194,36 @@ final class AppState {
         panelController?.toggle()
     }
 
-    /// Opens the Settings scene from outside the SwiftUI scene hierarchy
-    /// (the notch panel). Selector names differ across macOS releases.
+    // MARK: - Launch at login (SMAppService)
+
+    var launchAtLoginEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            hookServerError = "Launch at login: \(error.localizedDescription)"
+        }
+    }
+
+    /// Settings render as a page INSIDE the notch panel — no separate
+    /// window, no app activation, nothing to crash. (Separate NSWindows
+    /// spawned from the non-activating panel proved crash-prone.)
     func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
-            _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        showingSettings = true
+        panelController?.presentAttention()  // pin the panel open
+    }
+
+    func closeSettings() {
+        showingSettings = false
+        if center.pending.isEmpty {
+            panelController?.releaseAttention()
         }
     }
 

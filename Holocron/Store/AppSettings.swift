@@ -85,6 +85,12 @@ final class AppSettings {
         didSet { defaults.set(systemNotifications, forKey: "systemNotifications") }
     }
 
+    /// The status bar icon is a fallback entry point; notch purists can
+    /// hide it (Settings stay reachable via the gear in the panel).
+    var showMenuBarIcon: Bool {
+        didSet { defaults.set(showMenuBarIcon, forKey: "showMenuBarIcon") }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -106,6 +112,7 @@ final class AppSettings {
         decisionHotkeysEnabled = defaults.object(forKey: "decisionHotkeysEnabled") as? Bool ?? true
         panelHotkeyEnabled = defaults.object(forKey: "panelHotkeyEnabled") as? Bool ?? true
         systemNotifications = defaults.object(forKey: "systemNotifications") as? Bool ?? true
+        showMenuBarIcon = defaults.object(forKey: "showMenuBarIcon") as? Bool ?? true
     }
 
     var transcriptRoots: [URL] {

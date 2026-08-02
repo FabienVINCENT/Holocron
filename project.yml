@@ -36,7 +36,7 @@ targets:
         INFOPLIST_FILE: Holocron/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Holocron/Resources/Holocron.entitlements
         ENABLE_HARDENED_RUNTIME: NO
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "0.1.2"
         CURRENT_PROJECT_VERSION: "1"
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
     dependencies:
@@ -57,9 +57,10 @@ targets:
     platform: macOS
     sources:
       - path: HookCLI
-      # The IPC protocol (and its JSON model) is shared source between the
-      # app and the hook binary.
+      # The IPC protocol (and its JSON model + debug log) is shared source
+      # between the app and the hook binary.
       - path: Holocron/Core/Hooks/HookProtocol.swift
+      - path: Holocron/Core/Hooks/HookDebugLog.swift
       - path: Holocron/Core/Models/JSONValue.swift
     settings:
       base:

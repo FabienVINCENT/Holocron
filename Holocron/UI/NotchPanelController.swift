@@ -14,9 +14,13 @@ final class NotchPanelController: NSObject {
     private var panel: NSPanel!
     private var hostingView: NSHostingView<NotchRootView>!
     private let state: AppState
-    private var collapseWorkItem: DispatchWorkItem?
     /// Expanded because of a card or hotkey: don't collapse on mouse exit.
     private var pinnedOpen = false
+    /// While expanded (and not pinned), a timer polls the real pointer
+    /// position to decide when to collapse. Hover events only ever OPEN the
+    /// panel (exit events misfire while the window resizes).
+    private var pointerWatchTimer: Timer?
+    private var pointerOutsideTicks = 0
 
     static let compactFallbackSize = NSSize(width: 240, height: 34)
     static let expandedSize = NSSize(width: 460, height: 540)
@@ -44,11 +48,29 @@ final class NotchPanelController: NSObject {
 
         let root = NotchRootView(
             state: state,
-            onHoverChange: { [weak self] hovering in self?.hoverChanged(hovering) },
             onTogglePin: { [weak self] in self?.toggle() }
         )
         hostingView = NSHostingView(rootView: root)
+        // CRITICAL: by default NSHostingView installs Auto Layout constraints
+        // that drive the WINDOW's size from the SwiftUI content size. They
+        // fight our setFrame() calls and leave the panel detached below the
+        // screen top while the content springs. The window frame is ours.
+        hostingView.sizingOptions = []
         panel.contentView = hostingView
+
+        // Hover-to-expand via an AppKit tracking area: deterministic, unlike
+        // SwiftUI onHover in a borderless panel that gets resized.
+        // .inVisibleRect keeps it in sync with every window resize.
+        // .mouseMoved matters: entering the window outside the pill must not
+        // expand, but sliding from there onto the pill must — and no new
+        // mouseEntered fires in that case.
+        hostingView.addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        ))
+        panel.acceptsMouseMovedEvents = true
 
         NotificationCenter.default.addObserver(
             self,
@@ -59,7 +81,7 @@ final class NotchPanelController: NSObject {
     }
 
     func show() {
-        applyFrame(animated: false)
+        applyFrame()
         panel.orderFrontRegardless()
     }
 
@@ -83,41 +105,108 @@ final class NotchPanelController: NSObject {
         setMode(.expanded, pinned: true)
     }
 
-    /// Cards resolved: allow collapse (unless the pointer is inside).
+    /// Cards resolved: allow collapse again (the pointer watcher takes over).
     func releaseAttention() {
         pinnedOpen = false
-        scheduleCollapse(after: 0.8)
+        updatePointerWatch()
     }
 
-    private func hoverChanged(_ hovering: Bool) {
-        if hovering {
-            collapseWorkItem?.cancel()
-            if mode == .compact { setMode(.expanded, pinned: false) }
-        } else if !pinnedOpen {
-            scheduleCollapse(after: 0.35)
-        }
+    // Explicit selector names: NSTrackingArea sends `mouseEntered:` /
+    // `mouseExited:` / `mouseMoved:` to its owner, but Swift would export
+    // these methods as `mouseEnteredWith:` etc. — never delivered.
+    @objc(mouseEntered:)
+    func mouseEntered(with event: NSEvent) {
+        expandIfPointerOnPill()
     }
 
-    private func scheduleCollapse(after delay: TimeInterval) {
-        collapseWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.pinnedOpen else { return }
-            self.setMode(.compact, pinned: false)
+    @objc(mouseMoved:)
+    func mouseMoved(with event: NSEvent) {
+        expandIfPointerOnPill()
+    }
+
+    @objc(mouseExited:)
+    func mouseExited(with event: NSEvent) {
+        // Ignored on purpose: exit events misfire during resizes. The
+        // pointer watcher decides when to collapse.
+    }
+
+    /// The window can transiently be LARGER than the visible pill (it keeps
+    /// the expanded size for 0.45s while the collapse animation plays), so
+    /// hovering the emptied area must not re-open the panel: only the pill
+    /// rectangle itself is a hover target.
+    private func expandIfPointerOnPill() {
+        guard mode == .compact else { return }
+        let size = state.compactSize
+        let frame = panel.frame
+        let pillRect = NSRect(
+            x: frame.midX - size.width / 2,
+            y: frame.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+        if pillRect.contains(NSEvent.mouseLocation) {
+            setMode(.expanded, pinned: false)
         }
-        collapseWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func setMode(_ newMode: Mode, pinned: Bool) {
         pinnedOpen = pinned && newMode == .expanded
-        guard mode != newMode else { return }
-        mode = newMode
-        state.panelExpanded = newMode == .expanded
-        applyFrame(animated: true)
+        if mode != newMode {
+            mode = newMode
+            if newMode == .expanded {
+                // Grow the window FIRST (visually a no-op: the content still
+                // draws the pill), then start the spring on the next runloop
+                // tick so it plays inside a stable window. Resizing and
+                // animating in the same pass stutters.
+                applyFrame()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.mode == .expanded else { return }
+                    self.state.panelExpanded = true
+                }
+            } else {
+                // Collapse: spring now, shrink the window after it played.
+                state.panelExpanded = false
+                applyFrame(afterCollapseAnimation: true)
+            }
+        }
+        updatePointerWatch()
+    }
+
+    // MARK: - Pointer watcher (collapse decision)
+
+    private func updatePointerWatch() {
+        let shouldWatch = mode == .expanded && !pinnedOpen
+        if shouldWatch {
+            guard pointerWatchTimer == nil else { return }
+            pointerOutsideTicks = 0
+            pointerWatchTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { _ in
+                Task { @MainActor [weak self] in self?.pointerTick() }
+            }
+        } else {
+            pointerWatchTimer?.invalidate()
+            pointerWatchTimer = nil
+        }
+    }
+
+    private func pointerTick() {
+        guard mode == .expanded, !pinnedOpen else {
+            updatePointerWatch()
+            return
+        }
+        // NSEvent.mouseLocation and panel.frame share screen coordinates.
+        let zone = panel.frame.insetBy(dx: -12, dy: -12)
+        if zone.contains(NSEvent.mouseLocation) {
+            pointerOutsideTicks = 0
+        } else {
+            pointerOutsideTicks += 1
+            if pointerOutsideTicks >= 2 {
+                setMode(.compact, pinned: false)
+            }
+        }
     }
 
     @objc private func screensChanged() {
-        applyFrame(animated: false)
+        applyFrame()
     }
 
     // MARK: - Geometry
@@ -127,7 +216,7 @@ final class NotchPanelController: NSObject {
         NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
     }
 
-    private func applyFrame(animated: Bool) {
+    private func applyFrame(afterCollapseAnimation: Bool = false) {
         guard let screen = targetScreen else { return }
         let hasNotch = screen.safeAreaInsets.top > 0
         state.screenHasNotch = hasNotch
@@ -144,17 +233,20 @@ final class NotchPanelController: NSObject {
         state.compactSize = compactSize
 
         let size = mode == .compact ? compactSize : Self.expandedSize
-        let origin = NSPoint(
-            x: screen.frame.midX - size.width / 2,
-            y: screen.frame.maxY - size.height
+        let frame = NSRect(
+            origin: NSPoint(
+                x: screen.frame.midX - size.width / 2,
+                y: screen.frame.maxY - size.height
+            ),
+            size: size
         )
-        let frame = NSRect(origin: origin, size: size)
 
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.28
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                panel.animator().setFrame(frame, display: true)
+        if afterCollapseAnimation {
+            // Keep the large window while the SwiftUI collapse spring plays,
+            // then shrink so the invisible area stops swallowing clicks.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                guard let self, self.mode == .compact else { return }
+                self.panel.setFrame(frame, display: true)
             }
         } else {
             panel.setFrame(frame, display: true)
@@ -177,4 +269,11 @@ final class NotchPanelController: NSObject {
 private final class NotchPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// AppKit normally pushes borderless windows below the menu bar. The
+    /// whole point of this panel is to hug the top edge of the screen (and
+    /// blend into the notch), so the frame is returned untouched.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
 }

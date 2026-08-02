@@ -69,12 +69,16 @@ Claude receives as feedback and acts on. Documented trade-off, toggleable
 (Settings → Permissions); when disabled, questions surface as jump-to-terminal
 cards.
 
-**Terminal matching (jump).** The hook inherits the environment of the shell
-that launched `claude`, so every envelope carries `ITERM_SESSION_ID`
-(`w0t2p0:GUID` — the GUID equals the AppleScript `id` of the iTerm2 session)
-plus the controlling `tty`. Jump = AppleScript scan of windows/tabs/sessions
-matching GUID first, tty second. No fuzzy cwd matching: a wrong-tab jump is
-worse than an error. Other terminals implement `TerminalIntegration`.
+**Host matching (jump).** The hook inherits the environment of whatever
+launched `claude`, so every envelope carries `ITERM_SESSION_ID` (GUID =
+AppleScript `id` of the iTerm2 session), the controlling `tty`,
+`TERM_PROGRAM`, `TERMINAL_EMULATOR` and `__CFBundleIdentifier` (the hosting
+app). `TerminalJumpService` routes on those markers, in order: iTerm2
+(GUID→tty AppleScript), Terminal.app (tty AppleScript), JetBrains IDEs
+(`open -b <ide-bundle> <cwd>` focuses the project window — PhpStorm etc.),
+Claude desktop app (activate by bundle id). Orca sessions inherit the
+markers of whatever hosts Orca, so they route naturally. Hook-free
+fallback: locate the claude process by cwd (ps+lsof) and match its tty.
 
 **Non-activating panel.** `NSPanel(.nonactivatingPanel)` with
 `canBecomeKey = false`, level above the status bar, on all Spaces. Buttons

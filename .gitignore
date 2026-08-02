@@ -30,3 +30,6 @@ appcast.xml
 # Sparkle keys — NEVER commit the private key
 sparkle_private_key*
 *.pem
+
+# Sparkle tools distribution — downloaded by CI, never committed
+sparkle/

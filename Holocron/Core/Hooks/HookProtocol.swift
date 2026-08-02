@@ -53,6 +53,12 @@ struct HookProcessContext: Codable, Sendable {
     let itermSessionId: String?
     let termSessionId: String?
     let termProgram: String?
+    /// "JetBrains-JediTerm" inside IDE terminals (PhpStorm, IntelliJ…).
+    let terminalEmulator: String?
+    /// Bundle id of the app that (transitively) spawned the session —
+    /// e.g. com.jetbrains.PhpStorm, com.anthropic.claudefordesktop.
+    /// Inherited via __CFBundleIdentifier.
+    let bundleIdentifier: String?
     let isOrca: Bool
 
     static func capture() -> HookProcessContext {
@@ -69,6 +75,8 @@ struct HookProcessContext: Codable, Sendable {
             itermSessionId: env["ITERM_SESSION_ID"],
             termSessionId: env["TERM_SESSION_ID"],
             termProgram: env["TERM_PROGRAM"],
+            terminalEmulator: env["TERMINAL_EMULATOR"],
+            bundleIdentifier: env["__CFBundleIdentifier"],
             isOrca: orcaMarkers.contains { env[$0] != nil }
         )
     }

@@ -5,20 +5,28 @@ struct HolocronApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra {
+        let settings = AppState.shared.settings
+        MenuBarExtra(isInserted: Binding(
+            get: { settings.showMenuBarIcon },
+            set: { settings.showMenuBarIcon = $0 }
+        )) {
             MenuContent(state: AppState.shared)
         } label: {
-            Image(systemName: "circle.hexagongrid.fill")
-        }
-
-        Settings {
-            SettingsView(state: AppState.shared)
+            MenuBarLabel(state: AppState.shared)
         }
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single instance: a stale twin (e.g. hung after a crash) stacks an
+        // invisible panel over ours at the top of the screen and swallows
+        // hover/clicks. The newest launch wins.
+        let bundleID = Bundle.main.bundleIdentifier ?? "fr.fabien-vincent.holocron"
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+            .forEach { $0.forceTerminate() }
+
         // LSUIElement app: no Dock icon, notch panel + menu bar item only.
         NSApp.setActivationPolicy(.accessory)
         Task { @MainActor in
@@ -29,6 +37,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         Task { @MainActor in
             AppState.shared.shutdown()
+        }
+    }
+}
+
+/// Status item label: icon + pending-card count (only when > 0).
+struct MenuBarLabel: View {
+    let state: AppState
+
+    var body: some View {
+        let pending = state.center.pending.count
+        HStack(spacing: 2) {
+            Image(systemName: pending > 0
+                ? "exclamationmark.circle.fill"
+                : "circle.hexagongrid.fill")
+            if pending > 0 {
+                Text("\(pending)")
+            }
         }
     }
 }
@@ -53,11 +78,14 @@ struct MenuContent: View {
         } else {
             Button("Install Claude Code hooks") { state.installHooks() }
         }
-        Button("Check for updates…") { state.updater?.checkForUpdates() }
+        if state.updater?.isConfigured == true {
+            Button("Check for updates…") { state.updater?.checkForUpdates() }
+                .disabled(state.updater?.canCheckForUpdates != true)
+        }
 
         Divider()
 
-        SettingsLink { Text("Settings…") }
+        Button("Settings…") { state.openSettings() }
         Button("Quit Holocron") { NSApp.terminate(nil) }
     }
 }

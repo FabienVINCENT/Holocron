@@ -8,7 +8,8 @@ final class HookProtocolTests: XCTestCase {
             context: HookProcessContext(
                 pid: 123, ppid: 45, tty: "/dev/ttys003",
                 itermSessionId: "w0t2p0:6BF9A6A4-0000-4444-8888-ABCDEF012345",
-                termSessionId: nil, termProgram: "iTerm.app", isOrca: false
+                termSessionId: nil, termProgram: "iTerm.app",
+                terminalEmulator: nil, bundleIdentifier: nil, isOrca: false
             ),
             payload: .object([
                 "session_id": .string("abc"),
@@ -83,11 +84,43 @@ final class HookProtocolTests: XCTestCase {
         let context = HookProcessContext(
             pid: 1, ppid: 2, tty: "/dev/ttys001",
             itermSessionId: "w0t2p0:6BF9A6A4-1234-4444-8888-ABCDEF012345",
-            termSessionId: nil, termProgram: "iTerm.app", isOrca: false
+            termSessionId: nil, termProgram: "iTerm.app",
+            terminalEmulator: nil, bundleIdentifier: nil, isOrca: false
         )
         XCTAssertEqual(
             TerminalAttachment(context: context).itermGUID,
             "6BF9A6A4-1234-4444-8888-ABCDEF012345"
         )
+    }
+
+    func testHostDetection() {
+        let phpstorm = HookProcessContext(
+            pid: 1, ppid: 2, tty: "/dev/ttys002",
+            itermSessionId: nil, termSessionId: nil, termProgram: nil,
+            terminalEmulator: "JetBrains-JediTerm",
+            bundleIdentifier: "com.jetbrains.PhpStorm", isOrca: false
+        )
+        XCTAssertTrue(TerminalAttachment(context: phpstorm).isJetBrains)
+        XCTAssertFalse(TerminalAttachment(context: phpstorm).isClaudeDesktopApp)
+
+        let desktop = HookProcessContext(
+            pid: 1, ppid: 2, tty: nil,
+            itermSessionId: nil, termSessionId: nil, termProgram: nil,
+            terminalEmulator: nil,
+            bundleIdentifier: "com.anthropic.claudefordesktop", isOrca: false
+        )
+        XCTAssertTrue(TerminalAttachment(context: desktop).isClaudeDesktopApp)
+        XCTAssertFalse(TerminalAttachment(context: desktop).isJetBrains)
+    }
+
+    func testAttachmentDecodingWithoutNewFields() throws {
+        // attachments.json written by pre-0.2 versions lacks the new keys.
+        let legacy = """
+        {"itermSessionId":"w0t0p0:AAA","termSessionId":null,"tty":"/dev/ttys001",
+         "termProgram":"iTerm.app","claudePid":42,"isOrca":false}
+        """
+        let decoded = try JSONDecoder().decode(TerminalAttachment.self, from: Data(legacy.utf8))
+        XCTAssertNil(decoded.bundleIdentifier)
+        XCTAssertEqual(decoded.itermGUID, "AAA")
     }
 }

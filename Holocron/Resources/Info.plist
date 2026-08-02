@@ -30,12 +30,13 @@
 	<!-- Automation (Apple Events) prompt, shown when jumping to an iTerm2 session. -->
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Holocron pilote iTerm2 pour vous amener directement à l’onglet du terminal où tourne la session d’agent sélectionnée (« Jump to terminal »).</string>
-	<!-- Sparkle auto-updates -->
+	<!-- Sparkle auto-updates (same key pair as r2-git2 — the
+	     SPARKLE_PRIVATE_KEY repo secret must hold the matching private key) -->
 	<key>SUFeedURL</key>
 	<string>https://github.com/FabienVINCENT/Holocron/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>REPLACE_WITH_SPARKLE_ED25519_PUBLIC_KEY</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<string>arMgfST15sf9y4B9+2+sedCUxP3ZhcBvM/9jfthlj24=</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
 </dict>
 </plist>

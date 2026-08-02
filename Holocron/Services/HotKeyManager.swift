@@ -90,13 +90,13 @@ final class HotKeyManager {
 
 /// Carbon key codes / modifiers used by Holocron.
 enum Keys {
-    static let h = kVK_ANSI_H
-    static let y = kVK_ANSI_Y
-    static let n = kVK_ANSI_N
-    static let one = kVK_ANSI_1
-    static let two = kVK_ANSI_2
-    static let three = kVK_ANSI_3
-    static let four = kVK_ANSI_4
-    static let cmd = cmdKey
-    static let controlOption = controlKey | optionKey
+    static let h = Int(kVK_ANSI_H)
+    static let y = Int(kVK_ANSI_Y)
+    static let n = Int(kVK_ANSI_N)
+    static let one = Int(kVK_ANSI_1)
+    static let two = Int(kVK_ANSI_2)
+    static let three = Int(kVK_ANSI_3)
+    static let four = Int(kVK_ANSI_4)
+    static let cmd = Int(cmdKey)
+    static let controlOption = Int(controlKey) | Int(optionKey)
 }
